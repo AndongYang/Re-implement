@@ -7,6 +7,7 @@ import torch
 from torchvision import transforms
 from torch.utils.data import Dataset
 
+#使用开源的数据增强实现：https://github.com/aleju/imgaug 
 from imgaug import augmenters as iaa
 from toolkit import get_h5_list
 
@@ -22,15 +23,46 @@ class CARLA_Dataset(Dataset):
             transform (): transform to be applied on a sample.
         """
         self.data_path = data_path
+        #可直接使用的路径列表
         self.data_list = get_h5_list(data_path)
+        self.transform = transform
+        #数据集中每个文件为一个序列，其中包含200个状态动作对
+        self.sequence_len = 200
 
     def __len__(self):
-        #返回数据集大小，待实现
-        return len()
+        #返回数据集大小
+        return self.sequence_len*len(self.data_list)
 
     def __getitem__(self, idx):
-        #提取对应下表的数据并将数据增强方法应用其中，待实现
-        return sample
+        #提取对应下标的数据并将数据增强方法应用其中，此处下标是指状态动作对，因此一个文件中有200个
+        #按照文件名顺序依次编号
+        file_idx = idx // self.sequence_len
+        sequence_idx = idx % self.sequence_len
+        file_path_name = data_list[file_idx]
+        
+        with h5py.File(file_path_name,"r") as reader:
+            #数据集包含两个datasets，具体可见https://github.com/carla-simulator/imitation-learning
+            img = reader['images_center'][sequence_idx]
+            #应用图像增强
+            img = self.transform(img)
+
+            #读取高维控制信息，转向角度，油门，刹车，车速。
+            target = reader['targets'][sequence_idx]
+            #统一数据类型
+            target = np.array(target, dtype = np.float32)
+            car_command = int(target[24])-2
+            car_speed = target[10]
+            car_steer = target[0]
+            car_gas = target[1]
+            car_break = target[2]
+
+            target_vec = np.zeros((4, 3), dtype=np.float32)
+            target_vec[car_command,:] = [car_steer, car_gas, car_break]
+
+            mask = np.zeros((4, 3), dtype=np.float32)
+            mask[car_command,:] = 1
+
+        return img, car_speed, target_vec, mask
 
 #为了方便处理训练与测试是需要的不同数据增强方法，再封一层
 class CARLA_Data():
@@ -48,18 +80,42 @@ class CARLA_Data():
 
 
         if train_eval_flag == "train":
-            transforms = transforms.Compose([
+            self.transforms = transforms.Compose([
                         transforms.RandomOrder([
-                            #各类数据增强方法,待实现
+                            #各类数据增强方法,随机顺序，且按一定概率决定是不是使用
+                            iaa.Sometimes(0.09, iaa.GaussianBlur(sigma=(0,1.5)))
+                            iaa.Sometimes(0.09, iaa.AdditiveGaussianNoise(
+                                                loc=0,
+                                                scale=(0.0, 0.05),
+                                                per_channel=0.5)),
+                            iaa.Sometimes(0.09, iaa.ContrastNormalization(
+                                                (0.8, 1.2),
+                                                per_channel=0.5)),
+                            iaa.Sometimes(0.3, iaa.Dropout(
+                                                (0.0, 0.10),
+                                                per_channel=0.5)),
+                            iaa.Sometimes(0.3, iaa.CoarseDropout(
+                                                (0.0, 0.10),
+                                                size_percent=(0.08, 0.2),
+                                                per_channel=0.5)),
+                            iaa.Sometimes(0.3, iaa.Add(
+                                                (-20, 20),
+                                                per_channel=0.5)),
+                            iaa.Sometimes(0.4, iaa.Multiply(
+                                                (0.9, 1.1),
+                                                per_channel=0.2)),
 
-
-                        ])
+                        ]),
                         transforms.ToTensor()
+                    ])
+        else:
+            self.transform = transforms.Compose([
+                    transforms.ToTensor()
                     ])
 
     def get_data_load():
         return torch.utils.data.DataLoader(
-                    CARLA_Dataset(data_path=self.data_path, transform=transforms),
+                    CARLA_Dataset(data_path=self.data_path, transform=self.transforms),
                     batch_size=self.batch_size,
                     num_workers=4,
                     pin_memory=True,
