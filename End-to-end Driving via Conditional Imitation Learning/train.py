@@ -40,7 +40,6 @@ def main():
     args = parser.parse_args()
     logging.basicConfig(filename=os.path.join(log_dir, "training.log"),
                     level=logging.ERROR)
-    #logging.critical("[{}]: {}".format(datetime.datetime.now(), output_str))
 
     #获取训练数据
     data = CARLA_Data(
