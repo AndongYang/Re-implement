@@ -4,11 +4,12 @@ import os
 import numpy as np
 import h5py
 import torch
+import random
 from torchvision import transforms
 from torch.utils.data import Dataset
 
 #使用开源的数据增强实现：https://github.com/aleju/imgaug 
-from imgaug import augmenters as iaa
+import imgaug.augmenters as iaa
 from toolkit import get_h5_list
 
 #数据读取主要使用torch.utils.data.DataLoader，其需要Dataset类型
@@ -38,20 +39,21 @@ class CARLA_Dataset(Dataset):
         #按照文件名顺序依次编号
         file_idx = idx // self.sequence_len
         sequence_idx = idx % self.sequence_len
-        file_path_name = data_list[file_idx]
+        file_path_name = self.data_list[file_idx]
         
         with h5py.File(file_path_name,"r") as reader:
             #数据集包含两个datasets，具体可见https://github.com/carla-simulator/imitation-learning
-            img = reader['images_center'][sequence_idx]
+            img = np.array(reader['rgb'])[sequence_idx]
             #应用图像增强
             img = self.transform(img)
 
             #读取高维控制信息，转向角度，油门，刹车，车速。
-            target = reader['targets'][sequence_idx]
+            target = np.array(reader['targets'])[sequence_idx]
             #统一数据类型
             target = np.array(target, dtype = np.float32)
             car_command = int(target[24])-2
-            car_speed = target[10]
+            #除以90km/h是为了标准化
+            car_speed = np.array([target[10]/90, ]).astype(np.float32)
             car_steer = target[0]
             car_gas = target[1]
             car_break = target[2]
@@ -62,7 +64,20 @@ class CARLA_Dataset(Dataset):
             mask = np.zeros((4, 3), dtype=np.float32)
             mask[car_command,:] = 1
 
-        return img, car_speed, target_vec, mask
+        return img, car_speed, target_vec.flatten(), mask.flatten()
+
+#iaa中的数据增强方法需要位单张图片或者多张图片调用augment_image()或者augment_images()
+#而transforms中的方法会将列表中的处理方法当作函数调用
+#因此写一个类处理这种矛盾
+class sometimes(object):
+    def __init__(self, p, seq):
+        self.p = p
+        self.seq = seq
+
+    def __call__(self, images):
+        if self.p < random.random():
+            return images
+        return self.seq.augment_image(images)
 
 #为了方便处理训练与测试是需要的不同数据增强方法，再封一层
 class CARLA_Data():
@@ -80,28 +95,28 @@ class CARLA_Data():
 
 
         if train_eval_flag == "train":
-            self.transforms = transforms.Compose([
+            self.tran = transforms.Compose([
                         transforms.RandomOrder([
                             #各类数据增强方法,随机顺序，且按一定概率决定是不是使用
-                            iaa.Sometimes(0.09, iaa.GaussianBlur(sigma=(0,1.5)))
-                            iaa.Sometimes(0.09, iaa.AdditiveGaussianNoise(
+                            sometimes(0.09, iaa.GaussianBlur(sigma=(0,1.5))),
+                            sometimes(0.09, iaa.AdditiveGaussianNoise(
                                                 loc=0,
                                                 scale=(0.0, 0.05),
                                                 per_channel=0.5)),
-                            iaa.Sometimes(0.09, iaa.ContrastNormalization(
+                            sometimes(0.09, iaa.ContrastNormalization(
                                                 (0.8, 1.2),
                                                 per_channel=0.5)),
-                            iaa.Sometimes(0.3, iaa.Dropout(
+                            sometimes(0.3, iaa.Dropout(
                                                 (0.0, 0.10),
                                                 per_channel=0.5)),
-                            iaa.Sometimes(0.3, iaa.CoarseDropout(
+                            sometimes(0.3, iaa.CoarseDropout(
                                                 (0.0, 0.10),
                                                 size_percent=(0.08, 0.2),
                                                 per_channel=0.5)),
-                            iaa.Sometimes(0.3, iaa.Add(
+                            sometimes(0.3, iaa.Add(
                                                 (-20, 20),
                                                 per_channel=0.5)),
-                            iaa.Sometimes(0.4, iaa.Multiply(
+                            sometimes(0.4, iaa.Multiply(
                                                 (0.9, 1.1),
                                                 per_channel=0.2)),
 
@@ -109,13 +124,13 @@ class CARLA_Data():
                         transforms.ToTensor()
                     ])
         else:
-            self.transform = transforms.Compose([
+            self.tran = transforms.Compose([
                     transforms.ToTensor()
                     ])
 
-    def get_data_load():
+    def get_data_load(self):
         return torch.utils.data.DataLoader(
-                    CARLA_Dataset(data_path=self.data_path, transform=self.transforms),
+                    CARLA_Dataset(data_path=self.data_path, transform=self.tran),
                     batch_size=self.batch_size,
                     num_workers=4,
                     pin_memory=True,

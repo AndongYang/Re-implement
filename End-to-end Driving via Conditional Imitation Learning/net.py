@@ -6,9 +6,9 @@ import torch.nn as nn
 
 
 class Net(nn.Module):
-    #论文使用参数：self.dropout_vec = [1.0] * 8 + [0.7] * 2 + [0.5] * 2 + [0.5] * 1 + [0.5, 1.] * 5
+    #self.dropout_vec = [1.0] * 8 + [0.7] * 2 + [0.5] * 2 + [0.5] * 1 + [0.5, 1.] * 5
     def __init__(self, dropout_vec=None):
-        super(CarlaNet, self).__init__()
+        super().__init__()
         self.conv_block = nn.Sequential(
             #200*88->98*42
             nn.Conv2d(3, 32, kernel_size=5, stride=2),
@@ -100,6 +100,15 @@ class Net(nn.Module):
 
                 nn.Linear(256, 1),
             )
+
+        #添加自己写的初始化？
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, img, speed):
         #图像卷积与展平
