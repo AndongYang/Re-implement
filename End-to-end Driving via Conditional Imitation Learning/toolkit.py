@@ -199,7 +199,7 @@ class VrgTransferSuite(ExperimentSuite):
                     [30, 41], [18, 107], [69, 45], [102, 95], [18, 145],
                     [111, 64], [79, 45], [84, 69], [73, 31], [37, 81]]
 
-        return[[36,40]]
+        #test： return[[36,40]]
         
         return [_poses_straight(),
                 _poses_one_curve(),
