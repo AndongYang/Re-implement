@@ -1,6 +1,9 @@
 # coding = utf-8
 import os
 import random
+import sys
+
+import torch
 
 from net import Net
 
@@ -10,6 +13,7 @@ try:
     from carla.carla_server_pb2 import Control
     from carla.sensor import Camera
     from carla.settings import CarlaSettings
+    from carla.driving_benchmark.experiment import Experiment
     from carla.driving_benchmark.experiment_suites.experiment_suite import ExperimentSuite
 except ImportError:
     raise RuntimeError('Cannot import carla abstract class')
@@ -48,13 +52,12 @@ class ImitationLearningAgent(Agent):
         self.model = Net()
         if torch.cuda.is_available():
             self.model.cuda()
-        self.load_model()
 
         #恢复checkpoint
         os.makedirs('./models_save/', exist_ok=True)
-        if os.path.isfile(args.models_save):
-            checkpoint = torch.load(args.models_save)
-            model.load_state_dict(checkpoint['state_dict'])
+        if os.path.isfile(models_save):
+            checkpoint = torch.load(models_save)
+            self.model.load_state_dict(checkpoint['state_dict'])
             print("Loaded net")
         else:
             print("Load net failed!")
@@ -196,6 +199,8 @@ class VrgTransferSuite(ExperimentSuite):
                     [30, 41], [18, 107], [69, 45], [102, 95], [18, 145],
                     [111, 64], [79, 45], [84, 69], [73, 31], [37, 81]]
 
+        return[[36,40]]
+        
         return [_poses_straight(),
                 _poses_one_curve(),
                 _poses_navigation(),
