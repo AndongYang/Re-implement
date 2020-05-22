@@ -27,7 +27,7 @@ def get_h5_list(file_dir):
         for file in files:  
             if os.path.splitext(file)[1] == '.h5':  
                 all_file.append(os.path.join(root, file))           
-                return all_file
+    return all_file
 
 #官网提供了测试代码的tensorflow版本https://github.com/carla-simulator/imitation-learning
 ##继承Agent抽象类并实现，之后将其传给run_driving_benchmark
