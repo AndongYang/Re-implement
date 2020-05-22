@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser(description='training arg')
 parser.add_argument('--gpu', default='1', type=str, help='GPU id to use.')
 parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float,
                     metavar='LR', help='initial learning rate')
-parser.add_argument('--batch_size', default=8, type=int, metavar='BS',
+parser.add_argument('--batch_size', default=32, type=int, metavar='BS',
                     help='batch size of training')
 #这两个目录是含有h5文件的文件夹
 parser.add_argument('--train_data_dir', default="./train_data/",
