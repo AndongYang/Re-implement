@@ -1,3 +1,5 @@
 Branch loss:0.026
 Speed loss:0.018
 Loss:0.0442
+
+The .pth file is saved in release.
